@@ -21,7 +21,7 @@ export default async function handler(req, res) {
 
     const rawToken = (req.headers.cookie || '').match(/(?:^|;\s*)club_session=([a-f0-9]{64})(?:;|$)/)?.[1];
     const hashedToken = rawToken ? digest(rawToken) : null;
-    let { player, round } = await loadState(hashedToken);
+    let { player, round, skipVote } = await loadState(hashedToken);
 
     if (req.method === 'POST') {
       if (req.headers.origin && req.headers.origin !== `https://${req.headers.host}` && req.headers.origin !== `http://${req.headers.host}`) throw new Error('Yêu cầu không hợp lệ.');
@@ -34,15 +34,18 @@ export default async function handler(req, res) {
           const token = randomBytes(32).toString('hex');
           const tokenHash = digest(token);
           await join(name, tokenHash);
-          ({ player, round } = await loadState(tokenHash));
+          ({ player, round, skipVote } = await loadState(tokenHash));
           res.setHeader('Set-Cookie', `club_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${process.env.VERCEL ? '; Secure' : ''}`);
         }
       } else if (body.action === 'guess') {
         if (!player) throw new Error('Hãy tham gia Club trước khi chơi.');
-        ({ player, round } = await updatePlayer(player.token, 'guess', body));
+        ({ player, round, skipVote } = await updatePlayer(player.token, 'guess', body));
       } else if (body.action === 'start') {
         if (!player) throw new Error('Hãy tham gia Club trước khi chơi.');
-        ({ player, round } = await updatePlayer(player.token, 'sync', body));
+        ({ player, round, skipVote } = await updatePlayer(player.token, 'sync', body));
+      } else if (body.action === 'proposeSkip' || body.action === 'voteSkip') {
+        if (!player) throw new Error('Hãy tham gia Club trước khi biểu quyết.');
+        ({ player, round, skipVote } = await updatePlayer(player.token, body.action, body));
       } else {
         throw new Error('Thao tác không hợp lệ.');
       }
@@ -55,6 +58,7 @@ export default async function handler(req, res) {
       game: publicGame(player?.game),
       round: publicRound(round),
       serverTime: new Date().toISOString(),
+      skipVote,
       leaderboard: ranks.slice(0, 50),
       storage: persistent ? 'postgres' : 'demo',
     }));

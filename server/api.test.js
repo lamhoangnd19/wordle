@@ -55,6 +55,17 @@ test('API gives every player the same timed round and credits wins exactly once'
     assert.equal(after.data.player.wins, 1);
     assert.equal(after.data.round.id, alice.data.round.id);
     assert.equal((await call(undefined, bob.cookie)).data.player.wins, 0);
+
+    const proposed = await call({ action: 'proposeSkip' }, alice.cookie);
+    assert.equal(proposed.data.skipVote.accepted, 1);
+    assert.equal(proposed.data.skipVote.total, 2);
+    const notified = await call(undefined, bob.cookie);
+    assert.equal(notified.data.skipVote.proposedByName, 'API Alice');
+    const approved = await call({ action: 'voteSkip', voteId: notified.data.skipVote.id, accept: true }, bob.cookie);
+    assert.notEqual(approved.data.round.id, alice.data.round.id);
+    assert.equal(approved.data.player.wins, 0);
+    assert.equal(approved.data.player.played, 0);
+    assert.equal((await call(undefined, alice.cookie)).data.player.wins, 1);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

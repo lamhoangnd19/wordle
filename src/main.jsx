@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowUpRight, ArrowRight, Trophy, Flame, X, HelpCircle, BarChart3, Delete, Check, Copy, Users, Sparkles, Clock, Target } from 'lucide-react';
+import { ArrowUpRight, ArrowRight, Trophy, Flame, X, HelpCircle, BarChart3, Delete, Check, Copy, Users, Sparkles, Clock, Target, SkipForward, Bell, ThumbsUp, ThumbsDown } from 'lucide-react';
 import './style.css';
 
 function App() {
@@ -14,6 +14,7 @@ function App() {
   const [tab, setTab] = useState('play');
   const [shake, setShake] = useState(false);
   const [clock, setClock] = useState('10:00');
+  const [notice, setNotice] = useState('');
   const pending = useRef(false);
   const api = useCallback(async (body) => {
     const response = await fetch('/api/game', body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -23,7 +24,7 @@ function App() {
   }, []);
   useEffect(() => { api().catch(e=>setError(e.message)); }, [api]);
   useEffect(() => {
-    const interval = setInterval(() => { if (!pending.current && document.visibilityState === 'visible') api().catch(()=>{}); }, 20000);
+    const interval = setInterval(() => { if (!pending.current && document.visibilityState === 'visible') api().catch(()=>{}); }, 5000);
     return () => clearInterval(interval);
   }, [api]);
   useEffect(() => {
@@ -47,16 +48,22 @@ function App() {
     if (pending.current) return;
     pending.current = true; setBusy(true); setError('');
     try {
+      const previousRound = data?.round?.id;
       const result = await api(body);
       if (body.action === 'guess' || body.action === 'start') setInput('');
       if (body.action === 'join') setModal(null);
+      if (body.action === 'proposeSkip' || body.action === 'voteSkip') {
+        if (result.round.id !== previousRound) setNotice('Tất cả đã đồng ý. Phiên mới đã bắt đầu!');
+        else if (body.action === 'voteSkip' && body.accept === false) setNotice('Bạn đã từ chối. Đề xuất bỏ qua đã kết thúc.');
+        else setNotice('Đã ghi nhận. Đang chờ những người chơi online còn lại.');
+      }
       return result;
     } catch(e) { setError(e.message); setShake(true); setTimeout(()=>setShake(false),450); }
     finally { setBusy(false); pending.current = false; }
   };
   const player = data?.player;
   const game = data?.game;
-  const round = data?.round;
+  const skipVote = data?.skipVote;
   const rows = game?.guesses || [];
   const active = game?.status === 'playing';
   const begin = () => setModal('join');
@@ -112,6 +119,7 @@ function App() {
           return <div key={c} className={`tile ${row?row.colors[c]:letter?'filled':''}`} style={{'--delay':`${c*65}ms`}} aria-label={row?`${letter}: ${{correct:'đúng vị trí',present:'sai vị trí',absent:'không có'}[row.colors[c]]}`:letter||'ô trống'}>{letter}</div>;
         })}</div>)}</div>
         <div className="message" aria-live="polite">{error?<span className="error">{error}</span>:busy?'Đang xử lý…':game?.status==='won'?<span className="success">Chính xác! +1 điểm · Chờ phiên mới sau {clock} 🎉</span>:game?.status==='lost'?<>Đáp án là <strong>{game.answer.toUpperCase()}</strong>. Phiên mới bắt đầu sau {clock}.</>:active?'Cùng một đáp án cho tất cả người chơi trong phiên này.':data&&!player?'Tham gia Club để bắt đầu đoán từ chung.':'Đang kết nối đến Club…'}</div>
+        {player&&<div className="skip-zone" aria-live="polite">{skipVote?<div className="skip-vote"><Bell size={18}/><div className="skip-copy"><strong>{skipVote.proposedByName} đề xuất bỏ qua phiên</strong><span>{skipVote.accepted}/{skipVote.total} người đã đồng ý{skipVote.isEligible?' · Phiếu của bạn được tính trong đề xuất này':' · Bạn vào sau khi biểu quyết bắt đầu'}</span></div>{skipVote.isEligible&&!skipVote.hasVoted?<div className="vote-buttons"><button className="vote-yes" disabled={busy} onClick={()=>perform({action:'voteSkip',voteId:skipVote.id,accept:true})}><ThumbsUp size={15}/>Đồng ý</button><button className="vote-no" disabled={busy} onClick={()=>perform({action:'voteSkip',voteId:skipVote.id,accept:false})}><ThumbsDown size={15}/>Không</button></div>:<span className="vote-waiting">{skipVote.hasVoted?'Đã đồng ý':'Đang chờ'}</span>}</div>:<button className="skip-button" disabled={busy} onClick={()=>perform({action:'proposeSkip'})}><SkipForward size={16}/>Đề xuất bỏ qua phiên</button>}{notice&&<span className="skip-notice">{notice}</span>}</div>}
         {!active && <div className="game-actions">{!player?<button className="primary" disabled={busy||!data} onClick={begin}><Sparkles size={16}/>Tham gia phiên này<ArrowRight size={16}/></button>:<button className="primary" disabled><Clock size={16}/>Phiên mới sau {clock}</button>}{game&&<button className="secondary" onClick={()=>copy(true)}>{copied?<Check size={16}/>:<Copy size={16}/>}Chia sẻ</button>}{!data&&error&&<button className="secondary" onClick={()=>{setError('');api().catch(e=>setError(e.message));}}>Kết nối lại</button>}</div>}
         <div className="keyboard" aria-label="Bàn phím">{['QWERTYUIOP','ASDFGHJKL','ZXCVBNM'].map((row,i)=><div className="keyboard-row" key={row}>{i===2&&<button className="wide-key" disabled={!active||busy} onClick={()=>keypress('ENTER')}>ENTER</button>}{[...row].map(k=><button key={k} className={keys[k.toLowerCase()]||''} disabled={!active||busy} onClick={()=>keypress(k)} aria-label={`${k}${keys[k.toLowerCase()]?`, ${keys[k.toLowerCase()]}`:''}`}>{k}</button>)}{i===2&&<button className="wide-key" aria-label="Xóa chữ" disabled={!active||busy} onClick={()=>keypress('BACKSPACE')}><Delete size={20}/></button>}</div>)}</div>
         <div className="game-bottom"><span><span className="tiny-square correct"/> Đúng vị trí</span><span><span className="tiny-square present"/> Sai vị trí</span><span><span className="tiny-square absent"/> Không có</span></div></section>
@@ -122,7 +130,7 @@ function App() {
       <footer><span><span className="footer-mark">w.</span> Một chút suy nghĩ. Một chút niềm vui.</span><span>5 chữ cái <span className="footer-dot">·</span> 6 lượt thử <span className="footer-dot">·</span> Từ mới mỗi 10 phút</span></footer>
       {data?.storage==='demo'&&<p className="demo-note">Bản chạy thử cục bộ · Điểm được lưu trong bộ nhớ và sẽ mất khi khởi động lại máy chủ.</p>}
     </main>
-    {modal&&<div className="modal-backdrop" onClick={()=>setModal(null)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title" onClick={e=>e.stopPropagation()}><button className="close-button" aria-label="Đóng" onClick={()=>setModal(null)}><X size={20}/></button>{modal==='join'?<><div className="modal-icon"><Users size={26}/></div><span className="section-label">CHÀO MỪNG ĐẾN CLUB</span><h2 id="dialog-title">Tên của bạn trên bảng hạng?</h2><p>Chọn một biệt danh để bạn bè nhận ra bạn.</p><form onSubmit={e=>{e.preventDefault();perform({action:'join',name});}}><label htmlFor="nickname">Tên người chơi</label><input id="nickname" value={name} onChange={e=>setName(e.target.value)} minLength={2} maxLength={20} required placeholder="Ví dụ: Minh Anh" autoComplete="nickname"/><p className="form-note">2–20 ký tự. Hồ sơ được ghi nhớ trên trình duyệt này.</p>{error&&<p role="alert" className="error">{error}</p>}<button className="primary" disabled={busy}>{busy?'Đang tham gia…':'Tham gia & chơi ngay'}<ArrowRight size={17}/></button></form></>:modal==='help'?<><div className="modal-icon"><HelpCircle size={26}/></div><h2 id="dialog-title">5 chữ cái. 6 cơ hội.</h2><p>Mọi người cùng đoán một từ tiếng Anh trong phiên 10 phút, tối đa 6 lượt. Khi đồng hồ về 0, một từ chung mới sẽ tự động xuất hiện.</p><div className="help-example">{[...'PLANT'].map((c,i)=><span key={c} className={`tile ${i===0?'correct':i===2?'present':'absent'}`}>{c}</span>)}</div><ul className="help-list"><li><span className="tiny-square correct"/><div><strong>Xanh: đúng chữ, đúng vị trí.</strong></div></li><li><span className="tiny-square present"/><div><strong>Vàng: đúng chữ, sai vị trí.</strong></div></li><li><span className="tiny-square absent"/><div><strong>Xám: chữ này không còn trong đáp án.</strong></div></li></ul><p>Chữ lặp chỉ được tô màu theo số lần xuất hiện trong đáp án. Giải đúng trong phiên +1 điểm lên bảng xếp hạng. Đồng điểm: ít lượt đoán trung bình hơn xếp trên, rồi đến tên theo thứ tự chữ cái.</p><button className="primary" onClick={()=>setModal(null)}>Đã hiểu<Check size={17}/></button></>:<><div className="modal-icon"><BarChart3 size={26}/></div><h2 id="dialog-title">Phong độ của {player?.name||'bạn'}</h2><p>Mỗi ván là một cơ hội tiến bộ.</p><div className="modal-stats">{[['Ván đã chơi',player?.played||0],['Điểm',player?.wins||0],['Chuỗi hiện tại',player?.streak||0],['Chuỗi tốt nhất',player?.best||0]].map(([label,value])=><div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div><button className="primary" onClick={()=>{setModal(null);if(!player)setModal('join');}}>{player?'Tiếp tục chơi':'Tham gia Club'}<ArrowRight size={17}/></button></>}</section></div>}
+    {modal&&<div className="modal-backdrop" onClick={()=>setModal(null)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title" onClick={e=>e.stopPropagation()}><button className="close-button" aria-label="Đóng" onClick={()=>setModal(null)}><X size={20}/></button>{modal==='join'?<><div className="modal-icon"><Users size={26}/></div><span className="section-label">CHÀO MỪNG ĐẾN CLUB</span><h2 id="dialog-title">Tên của bạn trên bảng hạng?</h2><p>Chọn một biệt danh để bạn bè nhận ra bạn.</p><form onSubmit={e=>{e.preventDefault();perform({action:'join',name});}}><label htmlFor="nickname">Tên người chơi</label><input id="nickname" value={name} onChange={e=>setName(e.target.value)} minLength={2} maxLength={20} required placeholder="Ví dụ: Minh Anh" autoComplete="nickname"/><p className="form-note">2–20 ký tự. Hồ sơ được ghi nhớ trên trình duyệt này.</p>{error&&<p role="alert" className="error">{error}</p>}<button className="primary" disabled={busy}>{busy?'Đang tham gia…':'Tham gia & chơi ngay'}<ArrowRight size={17}/></button></form></>:modal==='help'?<><div className="modal-icon"><HelpCircle size={26}/></div><h2 id="dialog-title">5 chữ cái. 6 cơ hội.</h2><p>Mọi người cùng đoán một từ tiếng Anh trong phiên 10 phút, tối đa 6 lượt. Khi đồng hồ về 0, một từ chung mới sẽ tự động xuất hiện. Người chơi online cũng có thể nhất trí bỏ qua phiên hiện tại.</p><div className="help-example">{[...'PLANT'].map((c,i)=><span key={c} className={`tile ${i===0?'correct':i===2?'present':'absent'}`}>{c}</span>)}</div><ul className="help-list"><li><span className="tiny-square correct"/><div><strong>Xanh: đúng chữ, đúng vị trí.</strong></div></li><li><span className="tiny-square present"/><div><strong>Vàng: đúng chữ, sai vị trí.</strong></div></li><li><span className="tiny-square absent"/><div><strong>Xám: chữ này không còn trong đáp án.</strong></div></li></ul><p>Chữ lặp chỉ được tô màu theo số lần xuất hiện trong đáp án. Giải đúng trong phiên +1 điểm lên bảng xếp hạng. Đồng điểm: ít lượt đoán trung bình hơn xếp trên, rồi đến tên theo thứ tự chữ cái.</p><button className="primary" onClick={()=>setModal(null)}>Đã hiểu<Check size={17}/></button></>:<><div className="modal-icon"><BarChart3 size={26}/></div><h2 id="dialog-title">Phong độ của {player?.name||'bạn'}</h2><p>Mỗi ván là một cơ hội tiến bộ.</p><div className="modal-stats">{[['Ván đã chơi',player?.played||0],['Điểm',player?.wins||0],['Chuỗi hiện tại',player?.streak||0],['Chuỗi tốt nhất',player?.best||0]].map(([label,value])=><div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div><button className="primary" onClick={()=>{setModal(null);if(!player)setModal('join');}}>{player?'Tiếp tục chơi':'Tham gia Club'}<ArrowRight size={17}/></button></>}</section></div>}
   </>;
 }
 createRoot(document.getElementById('root')).render(<App/>);
