@@ -46,13 +46,15 @@ test('API gives every player the same timed round and credits wins exactly once'
     const internal = await findPlayer(createHash('sha256').update(rawToken).digest('hex'));
     const won = await call({ action: 'guess', gameId: alice.data.game.id, guess: internal.game.answer }, alice.cookie);
     assert.equal(won.data.game.status, 'won');
-    assert.equal(won.data.player.wins, 1);
+    assert.equal(won.data.player.wins, won.data.game.points);
+    assert.ok(won.data.game.points >= 1 && won.data.game.points <= 5);
+    assert.equal(won.data.player.solved, 1);
     assert.equal(won.data.player.played, 1);
 
     const duplicate = await call({ action: 'guess', gameId: alice.data.game.id, guess: internal.game.answer }, alice.cookie);
     assert.equal(duplicate.status, 400);
     const after = await call(undefined, alice.cookie);
-    assert.equal(after.data.player.wins, 1);
+    assert.equal(after.data.player.wins, won.data.game.points);
     assert.equal(after.data.round.id, alice.data.round.id);
     assert.equal((await call(undefined, bob.cookie)).data.player.wins, 0);
 
@@ -65,7 +67,7 @@ test('API gives every player the same timed round and credits wins exactly once'
     assert.notEqual(approved.data.round.id, alice.data.round.id);
     assert.equal(approved.data.player.wins, 0);
     assert.equal(approved.data.player.played, 0);
-    assert.equal((await call(undefined, alice.cookie)).data.player.wins, 1);
+    assert.equal((await call(undefined, alice.cookie)).data.player.wins, won.data.game.points);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

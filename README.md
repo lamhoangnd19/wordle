@@ -1,6 +1,6 @@
 # Wordle Club
 
-Wordle phiên chung cho nhóm bạn: tất cả người chơi cùng giải một từ tiếng Anh 5 chữ cái trong 10 phút, tối đa 6 lượt đoán. Hết giờ, hệ thống tự chuyển sang một từ chung mới. Người chơi online có thể biểu quyết nhất trí để bỏ qua sớm. Mỗi người giải đúng nhận 1 điểm; người chưa hoàn thành không được cộng điểm.
+Wordle phiên chung cho nhóm bạn: tất cả người chơi cùng giải một từ tiếng Anh 5 chữ cái trong 10 phút, tối đa 6 lượt đoán. Hết giờ, hệ thống tự chuyển sang một từ chung mới. Người chơi online có thể biểu quyết nhất trí để bỏ qua sớm. Điểm thưởng phụ thuộc tốc độ: 5 điểm trong 2 phút đầu, rồi giảm còn 4, 3, 2 và 1 điểm sau mỗi mốc 2 phút; người chưa hoàn thành không được cộng điểm.
 
 ## Chạy trên máy
 
@@ -37,6 +37,7 @@ Tài liệu: [Vite trên Vercel](https://vercel.com/docs/frameworks/frontend/vit
 - Đáp án nằm trên máy chủ, không gửi xuống trình duyệt trước khi ván kết thúc. Chấm chữ lặp ưu tiên chữ đúng vị trí, rồi phân bổ số chữ còn lại.
 - Cookie HttpOnly chứa token ngẫu nhiên; database chỉ lưu SHA-256 của token. Biệt danh duy nhất, không phân biệt chữ hoa/thường. Hồ sơ gắn với trình duyệt, chưa có đăng nhập hoặc khôi phục trên thiết bị khác. Xóa cookie sẽ mất quyền truy cập hồ sơ cũ.
 - Mọi thiết bị nhận cùng mã phiên, đáp án và thời điểm kết thúc từ máy chủ; đồng hồ client được hiệu chỉnh bằng thời gian máy chủ. Mỗi phiên kéo dài 10 phút, kể cả phiên mới được tạo sớm sau một biểu quyết thành công.
+- Điểm một lần giải đúng được tính từ thời điểm bắt đầu phiên: 0–2 phút = 5, 2–4 = 4, 4–6 = 3, 6–8 = 2, 8–10 = 1. Số từ đã giải được lưu riêng để tính tỷ lệ thắng và lượt đoán trung bình chính xác.
 - Bảng hạng toàn bộ người chơi: số từ giải đúng giảm dần; đồng điểm xét số lượt đoán trung bình trong ván thắng tăng dần, sau đó tên theo thứ tự chữ cái. Hiển thị 50 người đứng đầu, hạng cá nhân tính trên toàn bộ người chơi.
 - PostgreSQL transaction khóa hàng người chơi để các yêu cầu đồng thời không cộng điểm hai lần. Số ván đã chơi chỉ tăng khi ván kết thúc.
 - Bảng hạng và biểu quyết cập nhật mỗi 5 giây khi trang đang mở. Người chơi có hoạt động trong 30 giây gần nhất được tính là online và được chốt vào danh sách biểu quyết. Người đề xuất tự đồng ý; chỉ khi toàn bộ danh sách đồng ý hệ thống mới tạo phiên mới. Một phiếu từ chối kết thúc đề xuất. Khi đồng hồ về 0, client tự tải phiên mới; lượt đoán gửi muộn cho phiên cũ bị từ chối. Không có điểm mẫu hoặc người chơi giả.

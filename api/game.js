@@ -52,7 +52,7 @@ export default async function handler(req, res) {
     }
 
     const ranks = await leaderboard();
-    const profile = player ? { id: player.id, name: player.name, wins: player.wins, played: player.played, streak: player.streak, best: player.best, rank: ranks.find(p => p.id === player.id)?.rank || null } : null;
+    const profile = player ? { id: player.id, name: player.name, wins: player.wins, solved: player.solved, played: player.played, streak: player.streak, best: player.best, rank: ranks.find(p => p.id === player.id)?.rank || null } : null;
     res.end(JSON.stringify({
       player: profile,
       game: publicGame(player?.game),

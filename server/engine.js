@@ -31,5 +31,5 @@ export function applyGuess(game, raw) {
 }
 export function publicGame(game) {
   if (!game) return null;
-  return { id: game.id, guesses: game.guesses, status: game.status, ...(game.status !== 'playing' ? { answer: game.answer } : {}) };
+  return { id: game.id, guesses: game.guesses, status: game.status, ...(game.status !== 'playing' ? { answer: game.answer } : {}), ...(game.points ? { points: game.points } : {}) };
 }

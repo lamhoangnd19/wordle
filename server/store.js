@@ -4,6 +4,7 @@ import { applyGuess, chooseWord } from './engine.js';
 
 export const ROUND_MS = 600000;
 export const ONLINE_MS = 30000;
+const SCORE_WINDOW_MS = ROUND_MS / 5;
 const players = new Map(), rounds = new Map(), skipRequests = new Map();
 let currentRoundSlot = null, memoryQueue = Promise.resolve(), sql;
 
@@ -18,6 +19,8 @@ export async function setup(connectionString = process.env.DATABASE_URL_UNPOOLED
   try {
     await db`CREATE TABLE IF NOT EXISTS club_players (id uuid PRIMARY KEY, token text UNIQUE NOT NULL, name text NOT NULL, wins integer NOT NULL DEFAULT 0, played integer NOT NULL DEFAULT 0, streak integer NOT NULL DEFAULT 0, best integer NOT NULL DEFAULT 0, attempts integer NOT NULL DEFAULT 0, game jsonb, created_at timestamptz NOT NULL DEFAULT now())`;
     await db`ALTER TABLE club_players ADD COLUMN IF NOT EXISTS last_seen timestamptz`;
+    await db`ALTER TABLE club_players ADD COLUMN IF NOT EXISTS solved integer NOT NULL DEFAULT 0`;
+    await db`UPDATE club_players SET solved=wins WHERE solved=0 AND wins>0`;
     await db`CREATE UNIQUE INDEX IF NOT EXISTS club_player_name ON club_players (lower(name))`;
     await db`CREATE TABLE IF NOT EXISTS club_rounds (slot bigint PRIMARY KEY, answer char(5) NOT NULL, starts_at timestamptz NOT NULL, ends_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`;
     await db`CREATE TABLE IF NOT EXISTS club_game_state (id smallint PRIMARY KEY CHECK (id = 1), current_slot bigint REFERENCES club_rounds(slot))`;
@@ -82,7 +85,7 @@ function syncPlayerRound(player, round) {
   return true;
 }
 async function savePlayer(db, player, now) {
-  await db`UPDATE club_players SET game=${db.json(player.game)},wins=${player.wins},played=${player.played},streak=${player.streak},best=${player.best},attempts=${player.attempts},last_seen=${new Date(Number(now))} WHERE id=${player.id}`;
+  await db`UPDATE club_players SET game=${db.json(player.game)},wins=${player.wins},played=${player.played},streak=${player.streak},best=${player.best},attempts=${player.attempts},solved=${player.solved},last_seen=${new Date(Number(now))} WHERE id=${player.id}`;
 }
 function memoryVote(request, playerId) {
   if (!request || request.status !== 'active') return null;
@@ -123,7 +126,7 @@ export async function loadState(token, now = Date.now()) {
 }
 export async function join(name, token) {
   requireStorage();
-  const player={id:randomUUID(),token,name,wins:0,played:0,streak:0,best:0,attempts:0,game:null,lastSeen:null};
+  const player={id:randomUUID(),token,name,wins:0,played:0,streak:0,best:0,attempts:0,solved:0,game:null,lastSeen:null};
   if(!persistent){
     if([...players.values()].some(p=>p.name.toLowerCase()===name.toLowerCase()))throw new Error('Tên này đã được sử dụng. Chọn một tên khác nhé!');
     players.set(token,player);return player;
@@ -131,13 +134,20 @@ export async function join(name, token) {
   try{return (await database()`INSERT INTO club_players (id,token,name) VALUES (${player.id},${token},${name}) RETURNING *`)[0];}
   catch(error){if(error.code==='23505')throw new Error('Tên này đã được sử dụng. Chọn một tên khác nhé!');throw error;}
 }
-function guess(player, body) {
+export function scoreForTime(round, now = Date.now()) {
+  const elapsed = Math.max(0, Number(now) - round.startsAt);
+  return Math.max(1, 5 - Math.floor(elapsed / SCORE_WINDOW_MS));
+}
+function guess(player, body, round, now) {
   if(body.gameId!==player.game.id)throw new Error('Phiên 10 phút này đã kết thúc. Đang tải từ mới…');
   const before=player.game.status;applyGuess(player.game,body.guess);
   if(before==='playing'&&player.game.status!=='playing'){
     player.played++;
-    if(player.game.status==='won'){player.wins++;player.streak++;player.attempts+=player.game.guesses.length;player.best=Math.max(player.best,player.streak);}
-    else player.streak=0;
+    if(player.game.status==='won'){
+      const points=scoreForTime(round,now);
+      player.game.points=points;player.wins+=points;player.solved++;player.streak++;
+      player.attempts+=player.game.guesses.length;player.best=Math.max(player.best,player.streak);
+    } else player.streak=0;
   }
 }
 async function proposeSkip(db, player, round, now) {
@@ -189,7 +199,7 @@ export async function updatePlayer(token, action, body={}, now=Date.now()) {
     if(!original)throw new Error('Hãy tham gia Club trước khi chơi.');
     let player=persistent?original:structuredClone(original);
     syncPlayerRound(player,round);player.lastSeen=timestamp;if(!persistent)players.set(token,player);
-    if(action==='guess')guess(player,body);
+    if(action==='guess')guess(player,body,round,timestamp);
     else if(action==='proposeSkip')round=await proposeSkip(db,player,round,timestamp);
     else if(action==='voteSkip')round=await castSkipVote(db,player,round,body,timestamp);
     else if(!['sync','start'].includes(action))throw new Error('Thao tác không hợp lệ.');
@@ -201,6 +211,6 @@ export async function updatePlayer(token, action, body={}, now=Date.now()) {
 }
 export async function leaderboard() {
   requireStorage();
-  const all=persistent?await database()`SELECT id,name,wins,played,streak,best,attempts FROM club_players WHERE played>0 ORDER BY wins DESC,CASE WHEN wins>0 THEN attempts::float/wins ELSE 999 END ASC,lower(name) ASC`:[...players.values()].filter(p=>p.played>0).sort((a,b)=>b.wins-a.wins||(a.wins?a.attempts/a.wins:999)-(b.wins?b.attempts/b.wins:999)||a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-  return all.map((p,i)=>({id:p.id,name:p.name,wins:p.wins,played:p.played,streak:p.streak,rank:i+1,average:p.wins?+(p.attempts/p.wins).toFixed(1):null}));
+  const all=persistent?await database()`SELECT id,name,wins,solved,played,streak,best,attempts FROM club_players WHERE played>0 ORDER BY wins DESC,CASE WHEN solved>0 THEN attempts::float/solved ELSE 999 END ASC,lower(name) ASC`:[...players.values()].filter(p=>p.played>0).sort((a,b)=>b.wins-a.wins||(a.solved?a.attempts/a.solved:999)-(b.solved?b.attempts/b.solved:999)||a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  return all.map((p,i)=>({id:p.id,name:p.name,wins:p.wins,solved:p.solved,played:p.played,streak:p.streak,rank:i+1,average:p.solved?+(p.attempts/p.solved).toFixed(1):null}));
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ROUND_MS, join, findPlayer, loadState, updatePlayer, leaderboard } from './store.js';
+import { ROUND_MS, join, findPlayer, loadState, updatePlayer, leaderboard, scoreForTime } from './store.js';
 
 test('all players share a ten-minute round, score once, and reset together', { skip: Boolean(process.env.DATABASE_URL) }, async () => {
   const now = Date.now();
@@ -13,12 +13,14 @@ test('all players share a ten-minute round, score once, and reset together', { s
   assert.equal(aliceState.round.endsAt - aliceState.round.startsAt, ROUND_MS);
 
   const answer = aliceState.player.game.answer;
+  const awarded = scoreForTime(aliceState.round, now);
   const requests = await Promise.allSettled([
     updatePlayer('store-alice', 'guess', { gameId: aliceState.player.game.id, guess: answer }, now),
     updatePlayer('store-alice', 'guess', { gameId: aliceState.player.game.id, guess: answer }, now),
   ]);
   assert.equal(requests.filter(result => result.status === 'fulfilled').length, 1);
-  assert.equal((await findPlayer('store-alice')).wins, 1);
+  assert.equal((await findPlayer('store-alice')).wins, awarded);
+  assert.equal((await findPlayer('store-alice')).solved, 1);
 
   const wrong = answer === 'crane' ? 'stone' : 'crane';
   await updatePlayer('store-bob', 'guess', { gameId: bobState.player.game.id, guess: wrong }, now);
@@ -31,8 +33,8 @@ test('all players share a ten-minute round, score once, and reset together', { s
   assert.equal(aliceState.player.game.status, 'playing');
   assert.equal(aliceState.player.game.guesses.length, 0);
   const ranks = await leaderboard();
-  assert.equal(ranks.find(p => p.name === 'Store Alice').wins, 1);
-  assert.equal(ranks.find(p => p.name === 'Store Bob').wins, 1);
+  assert.equal(ranks.find(p => p.name === 'Store Alice').wins, awarded);
+  assert.equal(ranks.find(p => p.name === 'Store Bob').wins, awarded);
 });
 
 test('stale round guesses are rejected without changing the new board', { skip: Boolean(process.env.DATABASE_URL) }, async () => {
@@ -69,9 +71,20 @@ test('all online players must approve a skip and unfinished players receive no p
 
   const daveAfter = await loadState('store-dave', now + 5);
   const eveAfter = await loadState('store-eve', now + 5);
-  assert.equal(daveAfter.player.wins, 1);
+  assert.equal(daveAfter.player.wins, 5);
+  assert.equal(daveAfter.player.solved, 1);
   assert.equal(daveAfter.player.played, 1);
   assert.equal(eveAfter.player.wins, 0);
   assert.equal(eveAfter.player.played, 0);
   assert.equal(eveAfter.player.game.id, daveAfter.player.game.id);
+});
+
+test('score decreases by one point every two minutes', () => {
+  const round = { startsAt: 1_000_000 };
+  assert.equal(scoreForTime(round, round.startsAt), 5);
+  assert.equal(scoreForTime(round, round.startsAt + 2 * 60 * 1000), 4);
+  assert.equal(scoreForTime(round, round.startsAt + 4 * 60 * 1000), 3);
+  assert.equal(scoreForTime(round, round.startsAt + 6 * 60 * 1000), 2);
+  assert.equal(scoreForTime(round, round.startsAt + 8 * 60 * 1000), 1);
+  assert.equal(scoreForTime(round, round.startsAt + 10 * 60 * 1000), 1);
 });
