@@ -40,7 +40,7 @@ Tài liệu: [Vite trên Vercel](https://vercel.com/docs/frameworks/frontend/vit
 - Bảng hạng toàn bộ người chơi: số từ giải đúng giảm dần; đồng điểm xét số lượt đoán trung bình trong ván thắng tăng dần, sau đó tên theo thứ tự chữ cái. Hiển thị 50 người đứng đầu, hạng cá nhân tính trên toàn bộ người chơi.
 - PostgreSQL transaction khóa hàng người chơi để các yêu cầu đồng thời không cộng điểm hai lần. Số ván đã chơi chỉ tăng khi ván kết thúc.
 - Bảng hạng cập nhật sau mỗi thao tác và mỗi 20 giây khi trang đang mở. Không có điểm mẫu hoặc người chơi giả.
-- Bộ từ điển khởi đầu được tuyển chọn tại `server/words.js` (hơn 800 từ), nhỏ hơn từ điển Wordle gốc. Có thể mở rộng danh sách tại đây; tất cả từ phải đúng 5 chữ cái ASCII. Từ ngẫu nhiên có thể trùng giữa hai người; không lặp ngay đáp án ván trước của cùng người.
+- Hơn 800 từ quen thuộc tại `server/words.js` được dùng làm đáp án. Lượt đoán được kiểm tra bằng toàn bộ 12.653 từ tiếng Anh 5 chữ cái từ gói MIT `an-array-of-english-words`, vì vậy từ hiếm hợp lệ vẫn được chấp nhận nhưng không bị chọn làm đáp án ngẫu nhiên. Từ ngẫu nhiên có thể trùng giữa hai người; không lặp ngay đáp án ván trước của cùng người.
 - Dành cho nhóm bạn: chưa có xác thực tài khoản, CAPTCHA hoặc giới hạn tốc độ dành cho cuộc thi công khai.
 
 ## Kiểm tra
