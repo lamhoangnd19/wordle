@@ -1,0 +1,10 @@
+{
+  "name": "wordle-club",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "node --env-file-if-exists=.env.local server/dev.js", "build": "vite build", "preview": "vite preview", "test": "node --test", "db:setup": "node --env-file-if-exists=.env.local server/setup.js" },
+  "dependencies": { "react": "^19.2.0", "react-dom": "^19.2.0", "postgres": "^3.4.7", "lucide-react": "^0.468.0" },
+  "devDependencies": { "vite": "^7.1.0", "@vitejs/plugin-react": "^5.0.0" },
+  "engines": { "node": ">=22.0.0" }
+}

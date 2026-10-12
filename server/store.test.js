@@ -1,0 +1,20 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {join, findPlayer, updatePlayer, leaderboard} from './store.js';
+test('streaks reset on loss, ties prefer fewer guesses and concurrent wins count once', {skip:Boolean(process.env.DATABASE_URL)}, async()=>{
+  await join('Store Alice','store-alice');await join('Store Bob','store-bob');
+  let a=await updatePlayer('store-alice','start',{});
+  const answer=a.game.answer;
+  const requests=await Promise.allSettled([updatePlayer('store-alice','guess',{gameId:a.game.id,guess:answer}),updatePlayer('store-alice','guess',{gameId:a.game.id,guess:answer})]);
+  assert.equal(requests.filter(r=>r.status==='fulfilled').length,1);
+  a=await findPlayer('store-alice');assert.equal(a.wins,1);assert.equal(a.streak,1);assert.equal(a.best,1);
+  let b=await updatePlayer('store-bob','start',{});
+  const wrong=b.game.answer==='crane'?'stone':'crane';
+  b=await updatePlayer('store-bob','guess',{gameId:b.game.id,guess:wrong});
+  b=await updatePlayer('store-bob','guess',{gameId:b.game.id,guess:b.game.answer});
+  const ranks=await leaderboard();
+  assert.ok(ranks.find(p=>p.name==='Store Alice').rank<ranks.find(p=>p.name==='Store Bob').rank);
+  a=await updatePlayer('store-alice','start',{});
+  for(const guess of ['crane','stone','bread','flame','cloud','grape','earth'].filter(w=>w!==a.game.answer).slice(0,6)) a=await updatePlayer('store-alice','guess',{gameId:a.game.id,guess});
+  assert.equal(a.game.status,'lost');assert.equal(a.streak,0);assert.equal(a.best,1);assert.equal(a.wins,1);assert.equal(a.played,2);
+});
