@@ -12,3 +12,5 @@
 @media(max-width:760px){.lobby{min-height:410px;padding:35px 20px}.lobby-actions form{flex-direction:column}.room-bar{flex-wrap:wrap}.room-bar .danger-link{margin-left:0}.delete-confirm{flex-wrap:wrap}.delete-confirm span{flex-basis:100%}}
 
 @media(min-width:761px){.workspace.rank-view{grid-template-columns:minmax(0,1fr)}.workspace.rank-view>.game-card{display:none}.workspace.rank-view>aside{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr);align-items:start}.workspace.rank-view .rank-card{min-height:430px}.workspace.rank-view .rank-list{max-height:560px;overflow:auto}}
+
+.tile.editable{cursor:pointer}.tile.editable:hover{border-color:#a8bba2;background:#f9fbf6}.tile.selected{border-color:#4f7d60;box-shadow:0 0 0 2px #dceadd;background:#fff}.tile.selected:focus-visible{outline:2px solid #4f7d60;outline-offset:2px}
